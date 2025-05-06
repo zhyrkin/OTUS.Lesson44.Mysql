@@ -1,0 +1,156 @@
+---
+- name: Prepere servers
+  hosts: all
+  become: yes 
+  gather_facts: true
+
+  tasks:
+    - name: Install utils
+      ansible.builtin.apt:
+        name:
+          - gnupg2 
+          - curl
+          - python3-pip
+        update_cache: yes
+
+    - name: download repo
+      ansible.builtin.apt:
+        deb: "https://repo.percona.com/apt/percona-release_latest.{{ ansible_distribution_release }}_all.deb"
+    
+    - name: install PyMySQL
+      ansible.builtin.pip:
+        name: PyMySQL
+        extra_args: --break-system-packages
+
+    - name: Enable Percona repository
+      shell: percona-release setup pdps-8.0
+    
+    - name: install percona
+      ansible.builtin.apt:
+        name:  percona-server-server
+    
+    - name: start mysql
+      ansible.builtin.systemd_service:
+        state: started
+        enabled: true
+        name: mysql
+        
+    - name: copy templates to servers
+      ansible.builtin.template:
+        src: "{{ item }}"
+        dest: "/etc/mysql/mysql.conf.d/{{ item }}"
+        owner: root
+        group: root
+        mode: 0644
+      with_items:
+        - 01-base.cnf
+        - 02-max-connections.cnf
+        - 03-performance.cnf
+        - 04-slow-query.cnf
+        - 05-binlog.cnf
+    
+    - name: restart mysql 
+      ansible.builtin.systemd_service:
+        state: restarted
+        name: mysql
+  
+
+
+- name: Config server
+  hosts: server
+  become: yes 
+  gather_facts: true
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: create db bet
+      community.mysql.mysql_db:
+        login_user: root
+        login_password: "{{ root_pass }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        name: bet
+        state: present
+    
+    - name: copy dump to server
+      ansible.builtin.copy:
+        src: bet.dmp
+        dest: /tmp/bet.dmp
+
+
+    - name: Restore db bet
+      community.mysql.mysql_db:
+        login_user: root
+        login_password: "{{ root_pass }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        name: bet
+        state: import
+        target: /tmp/bet.dmp
+
+    - name: Create user for replication
+      community.mysql.mysql_user:
+        login_user: root
+        login_password: "{{ root_pass }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        name: repl
+        host: '%'
+        password: "{{ repl_pass }}"
+        state: present
+        priv: '*.*:REPLICATION SLAVE'
+    
+    - name: Dump db, ignore table
+      community.mysql.mysql_db:
+        login_user: root
+        login_password: "{{ root_pass }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        state: dump
+        name: all
+        target: /tmp/master.sql
+        ignore_tables: 
+          - bet.events_on_demand
+          - bet.v_same_event
+        dump_extra_args: --triggers --routines --master-data
+
+
+    - name: Copy dump from server to replica
+      ansible.builtin.copy:
+        src: /tmp/master.sql
+        dest: /tmp/master.sql
+      delegate_to: slave
+
+- name: Config replication server
+  hosts: slave
+  become: yes 
+  gather_facts: true
+  vars_files:
+    - vars.yml
+
+  tasks:
+    # - name: restore dump on replica server
+    #   community.mysql.mysql_db:
+    #     login_user: root
+    #     login_password: "{{ root_pass }}"
+    #     login_unix_socket: /var/run/mysqld/mysqld.sock
+    #     name: bet
+    #     state: import
+    #     target: /tmp/master.sql
+
+    - name: add replication on replication server
+      community.mysql.mysql_replication:
+        login_user: root
+        login_password: "{{ root_pass }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        mode: changeprimary
+        primary_host: "{{ hostvars['server']['ansible_host'] }}"
+        primary_port: 3306
+        primary_user: repl
+        primary_password: "{{ repl_pass }}"
+        primary_auto_position: true
+
+    
+    - name: Start replication
+      community.mysql.mysql_replication:
+        login_user: root
+        login_password: "{{ root_pass }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        mode: startreplica

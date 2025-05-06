@@ -1,0 +1,3 @@
+[server]
+server ansible_host=10.200.3.95 server_id=1
+slave  ansible_host=10.200.3.96 server_id=2
