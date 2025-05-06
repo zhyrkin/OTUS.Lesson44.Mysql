@@ -8,11 +8,11 @@
 | outcome            |
 2) Настроить GTID репликацию
 
-Выполнение домашнего задания:
-Тестовый стенд 2 VM ( 2CPU 2GB RAM 6GB HDD OS DEBIAN 12)
-В файле vars укажем root пароль в переменной 'root_pass'
-Запускаем playbook mysql, дожидаемся выполенения и проверям результаты: 
-Проверим что на реплике есть база данных bet и что реплицируются нужные таблицы:
+Выполнение домашнего задания:  
+Тестовый стенд 2 VM ( 2CPU 2GB RAM 6GB HDD OS DEBIAN 12)  
+В файле vars укажем root пароль в переменной 'root_pass'  
+Запускаем playbook mysql, дожидаемся выполенения и проверям результаты:   
+Проверим что на реплике есть база данных bet и что реплицируются нужные таблицы:  
 ```
 mysql> SHOW DATABASES LIKE 'bet';
 +----------------+
@@ -58,7 +58,7 @@ mysql>  SHOW SLAVE STATUS\G
 
 ```
 
-Проверим что репликация работает. Добавим на матере данные в БД bet:
+Проверим что репликация работает. Добавим на матере данные в БД bet:  
 ```
 mysql> USE bet;
 Reading table information for completion of table and column names
@@ -83,7 +83,7 @@ mysql> SELECT * FROM bookmaker;
 5 rows in set (0,00 sec)
 ```
 
-и проверим что на slave появились эти же строки:
+и проверим что на slave появились эти же строки:  
 ```
 mysql> SELECT * FROM bookmaker;
 +----+----------------+
@@ -98,7 +98,7 @@ mysql> SELECT * FROM bookmaker;
 5 rows in set (0,00 sec)
 ```
 
-Глянем binlog
+Глянем binlog  
 ```
 *************************** 97. row ***************************
    Log_name: mysql-bin.000001
